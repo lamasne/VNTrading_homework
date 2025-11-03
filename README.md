@@ -26,7 +26,7 @@ uv sync
 
 You can run the main script with
 ```bash
-uv run python src/main.py
+uv run python main.py
 ```
 
 All required files (`inputs/`, `src/`, `outputs/`, `pyproject.toml`) are included in the archive.
