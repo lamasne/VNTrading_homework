@@ -9,8 +9,13 @@ inputs_dir = "inputs"
 outputs_dir = "outputs"
 
 df = pd.read_csv(inputs_dir + "/BTCUSDT_price_data_2024-01-24.csv")
-df['dt'] = pd.to_datetime(pd.to_numeric(df['timestamp'], errors='coerce'),unit='s', utc=True)
-df = df.sort_values('dt')
+ts = pd.to_numeric(
+    df['timestamp'].astype(str).str.extract(r'(\d+)').iloc[:, 0],
+    errors='coerce'
+)
+df['date'] = pd.to_datetime(ts, unit='ms', utc=True)
+df['date'] = df['date'].dt.strftime('%Y-%m-%d %H:%M')
+df = df.sort_values('date')
 prices = df['mid_price']
 
 # 1. Compute 1 minute relative returns defined as:
@@ -28,6 +33,8 @@ df.loc[buy_signal,  'signal'] = 1
 
 # 4. Backtest the strategy
 start_capital = 100_000
+fee = 0.0002  # 0.02% per trade
+
 
 df['pos'] = pd.Series(df['signal']).replace(0, np.nan).ffill().fillna(0)
 if is_pos_lag:
@@ -47,7 +54,8 @@ print(df.tail(30))
 
 end_capital = df['equity'].iloc[-1]
 total_return = end_capital / start_capital - 1
-n_trades = (df['signal'] != 0).sum()
+df['trade'] = df['pos'].diff().abs().fillna(0)  # 1 when flip, else 0
+n_trades = df['trade'].sum()
 
 # Max drawdown: peak-to-trough
 rollmax = df['equity'].cummax()
