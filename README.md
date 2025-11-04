@@ -6,14 +6,13 @@ Time-series analysis and modeling in Python.
 ## Environment
 
 Python 3.12, managed with **uv** (`pyproject.toml`).
-Main libs: `numpy`, `pandas`, `polars`, `matplotlib`, `scikit-learn`.
+Main libs: `numpy`, `pandas`, `matplotlib`.
 
 ## Structure
 
 ```
 inputs/      # provided data files
-src/         # code
-outputs/     # results
+outputs/     # generated plots and report
 ```
 
 ## Usage
@@ -28,5 +27,3 @@ You can run the main script with
 ```bash
 uv run python main.py
 ```
-
-All required files (`inputs/`, `src/`, `outputs/`, `pyproject.toml`) are included in the archive.

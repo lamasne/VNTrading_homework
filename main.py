@@ -4,15 +4,13 @@ import matplotlib.pyplot as plt
 
 # Configuration
 inputs_dir = "inputs"
-outputs_dir = "outputs"
+outputs_dir = "outputs/plots"
 
 # Run parameters
-is_visualize = True
-is_pos_lag = True # add lag between signal and buy/sell operation (since we can't trade at signal time)
-sma_window = 10
+is_visualize = False
+sma_window = 5
 
-print(f"--------- Run parameters: {sma_window=}, {is_pos_lag=}, {is_visualize=} ---------")
-
+print(f"--------- Run parameters: {sma_window=}, {is_visualize=} ---------")
 
 # Read and format data
 df = pd.read_csv(inputs_dir + "/BTCUSDT_price_data_2024-01-24.csv")
@@ -28,12 +26,12 @@ prices = df['mid_price']
 # 1. Compute 1 minute relative returns defined as:
 df['r'] = prices.diff() / prices.shift(1)
 
-# 2. Compute a 10-period simple moving average (SMA) of the price.
-df['sma10']= prices.rolling(window=sma_window).mean()
+# 2. Compute a simple moving average (SMA) of the price.
+df[f'sma{sma_window}'] = prices.rolling(window=sma_window).mean()
 
 # 3. Define trading signals (SMA crossing)
-buy_signal = (prices.shift(1) <= df['sma10'].shift(1)) & (prices > df['sma10'])
-sell_signal = (prices.shift(1) >= df['sma10'].shift(1)) & (prices < df['sma10'])
+buy_signal = (prices.shift(1) <= df[f'sma{sma_window}'].shift(1)) & (prices > df[f'sma{sma_window}'])
+sell_signal = (prices.shift(1) >= df[f'sma{sma_window}'].shift(1)) & (prices < df[f'sma{sma_window}'])
 df['signal'] = 0
 df.loc[sell_signal, 'signal'] = -1
 df.loc[buy_signal,  'signal'] = 1
@@ -48,8 +46,8 @@ for fee in [0, 0.0002]:
     print(f"--------- Backtesting for fee = {fee:.2e} ---------")
 
     df['pos'] = pd.Series(df['signal']).replace(0, np.nan).ffill().fillna(0)
-    if is_pos_lag:
-        df['pos'] = df['pos'].shift(1).fillna(0) 
+    # add lag between signal and buy/sell operation (since we can't trade at signal time)
+    df['pos'] = df['pos'].shift(1).fillna(0) 
     # print(df.head(30))
 
     # Calculate returns (cumulatively, could be done selectively on pos switches for potentially faster calculations)
@@ -90,29 +88,32 @@ for fee in [0, 0.0002]:
     ax.set_title('Cumulative PnL (Equity)') 
     ax.legend(loc='best')
 
-plt.show()
+# save plot in outputs dir
+plt.savefig(outputs_dir + f'/equity_sma_{sma_window}.png')
 
+## Extra visualization
+# Price and SMA
+fig, ax = plt.subplots()
+ax.plot(df.index, df['mid_price'])
+ax.plot(df.index, df[f'sma{sma_window}'])
+ax.set_title("BTCUSDT Price")
+ax.set_xlabel("Time")
+ax.set_ylabel("Price")
+ax.legend(['Price', f'SMA{sma_window}'])
+plt.savefig(outputs_dir + f'/price_sma_{sma_window}.png')
 
-if is_visualize:
-    # Price and SMA
-    fig, ax = plt.subplots()
-    ax.plot(df.index, df['mid_price'])
-    ax.plot(df.index, df['sma10'])
-    ax.set_title("BTCUSDT Price")
-    ax.set_xlabel("Time")
-    ax.set_ylabel("Price")
-    ax.legend(['Price', 'SMA10'])
+# Buy/sell signals
+buy_idxs  = df.index[df['signal'] == 1]
+sell_idxs = df.index[df['signal'] == -1]
+for t in buy_idxs:
+    ax.axvline(t, color='green', alpha=0.6, linewidth=1)
+for t in sell_idxs:
+    ax.axvline(t, color='red', alpha=0.6, linewidth=1)
+# ax.legend(['Buy', 'Sell'])
+plt.savefig(outputs_dir + f'/signals_sma_{sma_window}.png')
 
-    # Buy/sell signals
-    buy_idxs  = df.index[df['signal'] == 1]
-    sell_idxs = df.index[df['signal'] == -1]
-    for t in buy_idxs:
-        ax.axvline(t, color='green', alpha=0.6, linewidth=1)
-    for t in sell_idxs:
-        ax.axvline(t, color='red', alpha=0.6, linewidth=1)
-    # ax.legend(['Buy', 'Sell'])
-
-
+if is_visualize: 
+    plt.show()
 
 
 print("--------- Finished ---------")
