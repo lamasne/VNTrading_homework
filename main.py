@@ -35,7 +35,6 @@ df.loc[buy_signal,  'signal'] = 1
 start_capital = 100_000
 fee = 0.0002  # 0.02% per trade
 
-
 df['pos'] = pd.Series(df['signal']).replace(0, np.nan).ffill().fillna(0)
 if is_pos_lag:
     df['pos'] = df['pos'].shift(1).fillna(0) 
@@ -44,7 +43,7 @@ if is_pos_lag:
 # Calculate returns (cumulatively, could be done selectively on pos switches for potentially faster calculations)
 df['returns'] = df['pos'] * df['r']
 df['equity'] = start_capital * (1 + df['returns']).cumprod()
-print(df.tail(30))
+# print(df.tail(30))
 
 # 5.Track and output these performance metrics:
 # o	Total return (%)
@@ -54,8 +53,10 @@ print(df.tail(30))
 
 end_capital = df['equity'].iloc[-1]
 total_return = end_capital / start_capital - 1
-df['trade'] = df['pos'].diff().abs().fillna(0)  # 1 when flip, else 0
-n_trades = df['trade'].sum()
+df['trade'] = df['pos'].diff().fillna(0) != 0
+df['trade'] = df['trade'].astype(int)
+n_trades = df['trade'].sum() 
+print(df.head(35))
 
 # Max drawdown: peak-to-trough
 rollmax = df['equity'].cummax()
