@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-is_visualize = True
+is_visualize = False
 is_pos_lag = True # add lag between signal and buy/sell operation (since we can't trade at signal time)
 
 inputs_dir = "inputs"
@@ -45,18 +45,16 @@ df['returns'] = df['pos'] * df['r']
 df['equity'] = start_capital * (1 + df['returns']).cumprod()
 # print(df.tail(30))
 
-# 5.Track and output these performance metrics:
-# o	Total return (%)
-# o	Number of trades
-# o	Maximum drawdown
-# o	Sharpe ratio (Optional)
+# 5.Track and output performance metrics
 
+# Total return
 end_capital = df['equity'].iloc[-1]
 total_return = end_capital / start_capital - 1
-df['trade'] = df['pos'].diff().fillna(0) != 0
-df['trade'] = df['trade'].astype(int)
+
+# Number of trades - passing from buy to sell, or sell to buy counts as 2 trades (only one pos at a time rule)
+df['trade'] = df['pos'].diff().abs().fillna(0)
 n_trades = df['trade'].sum() 
-print(df.head(35))
+# print(df.head(35))
 
 # Max drawdown: peak-to-trough
 rollmax = df['equity'].cummax()
