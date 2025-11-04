@@ -33,6 +33,7 @@ df.loc[buy_signal,  'signal'] = 1
 
 # 4. Backtest the strategy
 start_capital = 100_000
+# fee = 0
 fee = 0.0002  # 0.02% per trade
 
 df['pos'] = pd.Series(df['signal']).replace(0, np.nan).ffill().fillna(0)
@@ -41,18 +42,19 @@ if is_pos_lag:
 # print(df.head(30))
 
 # Calculate returns (cumulatively, could be done selectively on pos switches for potentially faster calculations)
-df['returns'] = df['pos'] * df['r']
-df['equity'] = start_capital * (1 + df['returns']).cumprod()
+df['ret_gross'] = df['pos'] * df['r']
+df['trade'] = df['pos'].diff().abs().fillna(0)
+df['cost'] = fee * df['trade']
+df['ret_net'] = df['ret_gross'] - df['cost']
+df['equity'] = start_capital * (1 + df['ret_net']).cumprod()
 # print(df.tail(30))
 
 # 5.Track and output performance metrics
-
 # Total return
 end_capital = df['equity'].iloc[-1]
 total_return = end_capital / start_capital - 1
 
 # Number of trades - passing from buy to sell, or sell to buy counts as 2 trades (only one pos at a time rule)
-df['trade'] = df['pos'].diff().abs().fillna(0)
 n_trades = df['trade'].sum() 
 # print(df.head(35))
 
@@ -62,7 +64,7 @@ drawdown = df['equity']/rollmax - 1
 max_dd = drawdown.min()
 
 # Sharpe ratio: for such short period (~1440 minutes), r_f is basically zero, thus
-sharpe = df['returns'].mean() / df['returns'].std()
+sharpe = df['ret_net'].mean() / df['ret_net'].std()
 # Could be annualized for fair evaluation. Assuming BTCUSDT trades 24/7 in a trading year
 sharpe_ann = sharpe * np.sqrt(60*24*365)
 
