@@ -2,12 +2,19 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-is_visualize = False
-is_pos_lag = True # add lag between signal and buy/sell operation (since we can't trade at signal time)
-
+# Configuration
 inputs_dir = "inputs"
 outputs_dir = "outputs"
 
+# Run parameters
+is_visualize = True
+is_pos_lag = True # add lag between signal and buy/sell operation (since we can't trade at signal time)
+sma_window = 10
+
+print(f"--------- Run parameters: {sma_window=}, {is_pos_lag=}, {is_visualize=} ---------")
+
+
+# Read and format data
 df = pd.read_csv(inputs_dir + "/BTCUSDT_price_data_2024-01-24.csv")
 ts = pd.to_numeric(
     df['timestamp'].astype(str).str.extract(r'(\d+)').iloc[:, 0],
@@ -22,7 +29,7 @@ prices = df['mid_price']
 df['r'] = prices.diff() / prices.shift(1)
 
 # 2. Compute a 10-period simple moving average (SMA) of the price.
-df['sma10']= prices.rolling(window=10).mean()
+df['sma10']= prices.rolling(window=sma_window).mean()
 
 # 3. Define trading signals (SMA crossing)
 buy_signal = (prices.shift(1) <= df['sma10'].shift(1)) & (prices > df['sma10'])
@@ -31,47 +38,59 @@ df['signal'] = 0
 df.loc[sell_signal, 'signal'] = -1
 df.loc[buy_signal,  'signal'] = 1
 
-# 4. Backtest the strategy
+# 4. Backtest the strategy - 7. Add realistic transaction cost (e.g., 0.02% per trade)
 start_capital = 100_000
-# fee = 0
-fee = 0.0002  # 0.02% per trade
 
-df['pos'] = pd.Series(df['signal']).replace(0, np.nan).ffill().fillna(0)
-if is_pos_lag:
-    df['pos'] = df['pos'].shift(1).fillna(0) 
-# print(df.head(30))
+fig, ax = plt.subplots()
+ax.axhline(start_capital, linestyle='--', linewidth=1, alpha=0.6, label='Start')
 
-# Calculate returns (cumulatively, could be done selectively on pos switches for potentially faster calculations)
-df['ret_gross'] = df['pos'] * df['r']
-df['trade'] = df['pos'].diff().abs().fillna(0)
-df['cost'] = fee * df['trade']
-df['ret_net'] = df['ret_gross'] - df['cost']
-df['equity'] = start_capital * (1 + df['ret_net']).cumprod()
-# print(df.tail(30))
+for fee in [0, 0.0002]:
+    print(f"--------- Backtesting for fee = {fee:.2e} ---------")
 
-# 5.Track and output performance metrics
-# Total return
-end_capital = df['equity'].iloc[-1]
-total_return = end_capital / start_capital - 1
+    df['pos'] = pd.Series(df['signal']).replace(0, np.nan).ffill().fillna(0)
+    if is_pos_lag:
+        df['pos'] = df['pos'].shift(1).fillna(0) 
+    # print(df.head(30))
 
-# Number of trades - passing from buy to sell, or sell to buy counts as 2 trades (only one pos at a time rule)
-n_trades = df['trade'].sum() 
-# print(df.head(35))
+    # Calculate returns (cumulatively, could be done selectively on pos switches for potentially faster calculations)
+    df['ret_gross'] = df['pos'] * df['r']
+    df['trade'] = df['pos'].diff().abs().fillna(0)
+    df['cost'] = fee * df['trade']
+    df['ret_net'] = df['ret_gross'] - df['cost']
+    df['equity'] = start_capital * (1 + df['ret_net']).cumprod()
+    # print(df.tail(30))
 
-# Max drawdown: peak-to-trough
-rollmax = df['equity'].cummax()
-drawdown = df['equity']/rollmax - 1
-max_dd = drawdown.min()
+    # 5.Track and output performance metrics
+    # Total return
+    end_capital = df['equity'].iloc[-1]
+    total_return = end_capital / start_capital - 1
 
-# Sharpe ratio: for such short period (~1440 minutes), r_f is basically zero, thus
-sharpe = df['ret_net'].mean() / df['ret_net'].std()
-# Could be annualized for fair evaluation. Assuming BTCUSDT trades 24/7 in a trading year
-sharpe_ann = sharpe * np.sqrt(60*24*365)
+    # Number of trades - passing from buy to sell, or sell to buy counts as 2 trades (only one pos at a time rule)
+    n_trades = df['trade'].sum() 
+    # print(df.head(35))
 
-print(f"Total return: {total_return*100:.2f}%, from ${start_capital:,.2f} to ${end_capital:,.2f}")
-print(f"Number of trades: {n_trades}")
-print(f"Max drawdown: {max_dd*100:.2f}%")
-print(f"Sharpe ratio: {sharpe:.2f} (annualized: {sharpe_ann:.2f} - unrealistic since tiny sample and no fees)")
+    # Max drawdown: peak-to-trough
+    rollmax = df['equity'].cummax()
+    drawdown = df['equity']/rollmax - 1
+    max_dd = drawdown.min()
+
+    # Sharpe ratio: for such short period (~1440 minutes), r_f is basically zero, thus
+    sharpe = df['ret_net'].mean() / df['ret_net'].std()
+    # Could be annualized for fair evaluation. Assuming BTCUSDT trades 24/7 in a trading year
+    sharpe_ann = sharpe * np.sqrt(60*24*365)
+
+    print(f"Total return: {total_return*100:.2f}%, from ${start_capital:,.2f} to ${end_capital:,.2f}")
+    print(f"Number of trades: {n_trades}")
+    print(f"Max drawdown: {max_dd*100:.2f}%")
+    print(f"Sharpe ratio: {sharpe:.2f} (annualized: {sharpe_ann:.2f}){' - unrealistic since tiny sample and no fees' if fee < 0.00001 else ''}")
+    
+    # 6. PnL curve
+    ax.plot(df.index, df['equity'], label=f'Equity (fee={fee})')
+    ax.set_ylabel('Equity (USD)')
+    ax.set_title('Cumulative PnL (Equity)') 
+    ax.legend(loc='best')
+
+plt.show()
 
 
 if is_visualize:
@@ -93,14 +112,7 @@ if is_visualize:
         ax.axvline(t, color='red', alpha=0.6, linewidth=1)
     # ax.legend(['Buy', 'Sell'])
 
-    # 6. PnL curve
-    fig, ax = plt.subplots()
-    ax.plot(df.index, df['equity'], label='Equity')
-    ax.axhline(start_capital, linestyle='--', linewidth=1, alpha=0.6, label='Start')
-    ax.set_ylabel('Equity (USD)')
-    ax.set_title('Cumulative PnL (Equity)') 
-    ax.legend()
-    plt.show()
+
 
 
 print("--------- Finished ---------")
